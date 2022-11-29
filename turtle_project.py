@@ -49,14 +49,15 @@ class TurtlesimProject:
         
         while (abs(distance_traveled - distance) > Tolerance) and not(rospy.is_shutdown()):
             distance_traveled = math.sqrt((pow((self.pose.x - starting_pose.x), 2) + pow((self.pose.y - starting_pose.y), 2)))
+            speedRate = abs(distance_traveled - distance) * 100 + 1
             if distance_traveled > distance and forward:
                 forward = not(forward)
-                vel_msg.linear.x = -vel_msg.linear.x/1.5
+                vel_msg.linear.x = -vel_msg.linear.x/speedRate
                 self.set_color(68, 86, 255, 0, 'Name')
             
             if (distance_traveled < distance and not(forward)):
                 forward = not(forward)
-                vel_msg.linear.x = -vel_msg.linear.x/1.5
+                vel_msg.linear.x = -vel_msg.linear.x/speedRate
                 tc.set_color(0, 255, 0, 0, 'Name')
             
             self.twist_pub.publish(vel_msg)
@@ -94,7 +95,7 @@ class TurtlesimProject:
         vel_msg.angular.x = 0
         vel_msg.angular.y = 0
 
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(50)
 
         self.twist_pub.publish(vel_msg)
         converted_angle = self.pose.theta
@@ -102,21 +103,28 @@ class TurtlesimProject:
         while ((abs(math.degrees(converted_angle)-math.degrees(goal_angle)) > Tolerance) or ()) and not(rospy.is_shutdown()):
             if converted_angle < 0:
                 converted_angle = math.radians(360-abs(math.degrees(converted_angle)))
+            
+            turnSpeedRate = abs(converted_angle - goal_angle) * 26 + 1
+            
             if (converted_angle > goal_angle and not(clockwise) and (goal_angle > converted_angle - math.radians(180))):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/1.5
+                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
             elif ((converted_angle < goal_angle) and (clockwise) and (converted_angle > goal_angle - math.radians(180))):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/1.5
+                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
             elif ((math.degrees(goal_angle) > 355) and math.degrees(converted_angle) < 10 and not(clockwise)):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/1.5
+                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
             elif ((math.degrees(goal_angle) < 5) and math.degrees(converted_angle) > 350 and clockwise):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/1.5
+                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
+            
+            
             self.twist_pub.publish(vel_msg)
             rate.sleep()
+            
             converted_angle = self.pose.theta
+            
             if converted_angle < 0:
                 converted_angle = math.radians(360-abs(math.degrees(converted_angle)))
                 
@@ -174,32 +182,63 @@ class TurtlesimProject:
             self.turn(100, 60, False)
             self.test_rec(length, depth-1)
             
-    def tree_rec(self, length, n):
-        if length < (length / n):
-            return
-        self.go_straight(length* 0.5, length / n, True)
-        self.turn(100, 45, False)
-        self.tree_rec(length * 0.5, length / n)
-        self.turn(100, 20, False)
-        self.tree_rec(length * 0.5, length / n)
-        self.turn(100, 75, True)
-        self.tree_rec(length * 0.5, length / n)
-        self.turn(100, 20, True)
-        self.tree_rec(length * 0.5, length / n)
-        self.turn(100, 30, False)
-        #self.turn(100, 180, False)
-        self.go_straight(3, length, False)
-        return
+    def face_up(self):
+        current_angle = self.pose.theta
+        current_angle = math.degrees(current_angle)
+        angles_to_turn = current_angle - 90
+        clockwise = True
+        
+        if(angles_to_turn < 0):
+            angles_to_turn = abs(angles_to_turn)
+            clockwise = False
+        
+        if (angles_to_turn > 180):
+            angles_to_turn = 360 - angle_to_turn
+            clockwise = not(clockwise)
+        
+        self.turn(100, angles_to_turn, clockwise)
+        
+    def draw_A(self, size, speed):
+        self.face_up()
+        
+        self.turn(100, 30, True)
+        self.go_straight(speed, size*2, True)
+        self.turn(100, 120, True)
+        self.go_straight(speed, size*2, True)
+        #self.set_color(0, 255, 0, 1, 'Name')
+        self.turn(100, 180, True)
+        self.go_straight(speed, size/1.25, True)
+        self.turn(100, 60, False)
+        self.set_color(0, 255, 0, 0, 'Name')
+        self.go_straight(speed, size*1.15, True)
+        
+    def draw_M(self, size, speed):
+        self.face_up()
+        
+        self.go_straight(speed, size*2, True)
+        self.turn(200, 150, True)
+        self.go_straight(speed, size*1.5, True)
+        self.turn(200, 120, False)
+        self.go_straight(speed, size*1.5, True)
+        self.turn(200, 150, True)
+        self.go_straight(speed, size*2, True)
+        
 
 if __name__ == '__main__':
     tc = TurtlesimProject()
     tc.reset_sim()
     tc.kill_turtle('turtle1')
-    tc.spawn_turtle(3.5, 1, 0, 'Name')
+    tc.spawn_turtle(2.5, 1, 0, 'Name')
     tc.set_color(0, 255, 0, 0, 'Name')
     rospy.sleep(1)
-    tc.tree_rec(0.5, 4)
-    #tc.test_rec(0.15, 4)
+    idx = 0
+    tc.draw_M(2, 5)
+    tc.draw_A(2, 5)
+    #tc.test_rec(0.2, 3)
+    #while idx < 6:
+    #    tc.test_rec(0.2, 3)
+    #    tc.turn(100, 60, False)
+    #    idx = idx + 1
     tc.kill_turtle('Name')
 
 

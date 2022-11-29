@@ -193,7 +193,7 @@ class TurtlesimProject:
             clockwise = False
         
         if (angles_to_turn > 180):
-            angles_to_turn = 360 - angle_to_turn
+            angles_to_turn = 360 - angles_to_turn
             clockwise = not(clockwise)
         
         self.turn(100, angles_to_turn, clockwise)
@@ -223,6 +223,24 @@ class TurtlesimProject:
         self.turn(200, 150, True)
         self.go_straight(speed, size*2, True)
         
+    def draw_E(self, size, speed):
+        self.face_up()
+        
+        self.turn(200, 90, True)
+        self.go_straight(speed, size, True)
+        self.turn(200, 180, True)
+        self.go_straight(speed, size, True)
+        self.turn(200, 90, True)
+        self.go_straight(speed, size, True)
+        self.turn(200, 90, True)
+        self.go_straight(speed, size, True)
+        self.turn(200, 180, True)
+        self.go_straight(speed, size, True)
+        self.turn(200, 90, True)
+        self.go_straight(speed, size, True)
+        self.turn(200, 90, True)
+        self.go_straight(speed, size, True)
+        
 
 if __name__ == '__main__':
     tc = TurtlesimProject()
@@ -233,7 +251,7 @@ if __name__ == '__main__':
     rospy.sleep(1)
     idx = 0
     tc.draw_M(2, 5)
-    tc.draw_A(2, 5)
+    tc.draw_E(2, 5)
     #tc.test_rec(0.2, 3)
     #while idx < 6:
     #    tc.test_rec(0.2, 3)

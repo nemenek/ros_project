@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import rospy
 import math
 from geometry_msgs.msg import Twist
@@ -6,14 +8,15 @@ from turtlesim.msg import Color
 from std_srvs.srv import Empty
 from turtlesim.srv import Spawn, SetPen, Kill, Spawn
 PI = 3.141592653589793
-Tolerance = 0.0001
+Tol_angle = 0.01
+Tol_dist = 0.0001
 
 class TurtlesimProject:
     def __init__(self):
         rospy.init_node('turtlesim_controller', anonymous=True)
 
         self.twist_pub = rospy.Publisher('/Name/cmd_vel', Twist, queue_size=10)
-        
+
         self.pose_subscriber = rospy.Subscriber('/Name/pose', Pose, self.cb_pose)
 
 
@@ -31,45 +34,47 @@ class TurtlesimProject:
 
         # Create and publish msg
         vel_msg = Twist()
-        if forward:
-            vel_msg.linear.x = speed
-        else:
-            vel_msg.linear.x = -speed
         vel_msg.linear.y = 0
         vel_msg.linear.z = 0
         vel_msg.angular.x = 0
         vel_msg.angular.y = 0
         vel_msg.angular.z = 0
 
-        rate = rospy.Rate(100)
+        rate = rospy.Rate(200)
 
         self.twist_pub.publish(vel_msg)
         distance_traveled = 0.0
-        
-        
-        while (abs(distance_traveled - distance) > Tolerance) and not(rospy.is_shutdown()):
+
+
+        while (abs(distance_traveled - distance) > Tol_dist) and not(rospy.is_shutdown()):
+            if forward:
+                vel_msg.linear.x = speed
+            else:
+                vel_msg.linear.x = -speed
+
             distance_traveled = math.sqrt((pow((self.pose.x - starting_pose.x), 2) + pow((self.pose.y - starting_pose.y), 2)))
-            speedRate = abs(distance_traveled - distance) * 100 + 1
+            p = abs(distance_traveled - distance) * 20
+            vel_msg.linear.x = vel_msg.linear.x * p
             if distance_traveled > distance and forward:
                 forward = not(forward)
-                vel_msg.linear.x = -vel_msg.linear.x/speedRate
+                vel_msg.linear.x = - vel_msg.linear.x
                 self.set_color(68, 86, 255, 0, 'Name')
-            
+
             if (distance_traveled < distance and not(forward)):
                 forward = not(forward)
-                vel_msg.linear.x = -vel_msg.linear.x/speedRate
+                vel_msg.linear.x = - vel_msg.linear.x
                 tc.set_color(0, 255, 0, 0, 'Name')
-            
+
             self.twist_pub.publish(vel_msg)
-            print('Distance traveled: ', str(distance_traveled))
-            print('Goal distance: ', str(distance))
+            #print('Distance traveled: ', str(distance_traveled))
+            #print('Goal distance: ', str(distance))
             rate.sleep()
 
 
         # Set velocity to 0
         vel_msg.linear.x = 0
         self.twist_pub.publish(vel_msg)
-        print('Final distance traveled: ' + str(distance_traveled))
+        #print('Final distance traveled: ' + str(distance_traveled))
 
 
     # Turn using time, and angular velocity omega
@@ -77,63 +82,79 @@ class TurtlesimProject:
         angular_speed = 2*PI*omega/360
         relative_angle = 2*PI*angle/360
 
-        vel_msg = Twist()
+        current_angle = math.degrees(self.pose.theta)
+
         if clockwise:
-            goal_angle = self.pose.theta - relative_angle
-            vel_msg.angular.z = - abs(angular_speed)
+            goal_angle = current_angle - angle
         else:
-            goal_angle = self.pose.theta + relative_angle
-            vel_msg.angular.z =  abs(angular_speed)
+            goal_angle = current_angle + angle
+
         if goal_angle < 0:
-            goal_angle = math.radians(360-abs(math.degrees(goal_angle)))
-            
-        if math.degrees(goal_angle) < 355 and math.degrees(goal_angle) > 350:
-            goal_angle = math.radians(360)
+            goal_angle = goal_angle + 360
+
+        if (goal_angle < 360 and goal_angle > 350) or (goal_angle < 0 and goal_angle > -10):
+            goal_angle = 0
+
+        vel_msg = Twist()
         vel_msg.linear.x = 0
         vel_msg.linear.y = 0
         vel_msg.linear.z = 0
         vel_msg.angular.x = 0
         vel_msg.angular.y = 0
 
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(200)
 
-        self.twist_pub.publish(vel_msg)
-        converted_angle = self.pose.theta
-        
-        while ((abs(math.degrees(converted_angle)-math.degrees(goal_angle)) > Tolerance) or ()) and not(rospy.is_shutdown()):
-            if converted_angle < 0:
-                converted_angle = math.radians(360-abs(math.degrees(converted_angle)))
-            
-            turnSpeedRate = abs(converted_angle - goal_angle) * 26 + 1
-            
-            if (converted_angle > goal_angle and not(clockwise) and (goal_angle > converted_angle - math.radians(180))):
+        angle_diff = current_angle-goal_angle
+
+        while not((abs(angle_diff) % 360) < Tol_angle ) \
+               and not(rospy.is_shutdown()):
+
+            if current_angle < 0:
+                current_angle = 360-abs(current_angle)
+
+            if goal_angle < 0:
+                goal_angle = goal_angle + 360
+
+            angle_diff = current_angle-goal_angle
+
+            if clockwise:
+                vel_msg.angular.z = - abs(angular_speed)
+            else:
+                vel_msg.angular.z =  abs(angular_speed)
+
+
+            p = min(abs(angle_diff), 50) * 0.3
+
+            vel_msg.angular.z = vel_msg.angular.z * p
+
+            if (current_angle > goal_angle and not(clockwise) and (goal_angle > current_angle - 180)):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
-            elif ((converted_angle < goal_angle) and (clockwise) and (converted_angle > goal_angle - math.radians(180))):
+                vel_msg.angular.z = -vel_msg.angular.z
+            elif ((current_angle < goal_angle) and (clockwise) and (current_angle > goal_angle - 180)):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
-            elif ((math.degrees(goal_angle) > 355) and math.degrees(converted_angle) < 10 and not(clockwise)):
+                vel_msg.angular.z = -vel_msg.angular.z
+            elif (goal_angle > 355) and (current_angle < 10) and not(clockwise):
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
-            elif ((math.degrees(goal_angle) < 5) and math.degrees(converted_angle) > 350 and clockwise):
+                vel_msg.angular.z = -vel_msg.angular.z
+            elif (goal_angle < 5) and (current_angle > 350) and clockwise:
                 clockwise = not(clockwise)
-                vel_msg.angular.z = -self.pose.angular_velocity/turnSpeedRate
-            
-            
+                vel_msg.angular.z = -vel_msg.angular.z
+
+
             self.twist_pub.publish(vel_msg)
             rate.sleep()
-            
-            converted_angle = self.pose.theta
-            
-            if converted_angle < 0:
-                converted_angle = math.radians(360-abs(math.degrees(converted_angle)))
-                
-            print('Current angle: ' + str(math.degrees(converted_angle)))
-            print('Goal angle: ' + str(math.degrees(goal_angle)))
+
+            current_angle = math.degrees(self.pose.theta)
+
+            if current_angle < 0:
+                current_angle = 360-abs(current_angle)
+
+            #print('Current angle: ' + str(current_angle))
+            #print('Goal angle: ' + str(goal_angle))
 
         vel_msg.angular.z = 0
         self.twist_pub.publish(vel_msg)
-        print('Final angle: ' + str(math.degrees(self.pose.theta)))
+        #print('Final angle: ' + str(math.degrees(self.pose.theta)))
 
 
     # Draw a square
@@ -159,17 +180,17 @@ class TurtlesimProject:
         clear_srvc = rospy.ServiceProxy('/reset', Empty)
         clear_srvc()
         rospy.wait_for_service('/reset')
-        
+
     def kill_turtle(self, name):
         kill_srvc = rospy.ServiceProxy('/kill', Kill)
         kill_srvc(name)
         rospy.wait_for_service('/kill')
-        
+
     def spawn_turtle(self, x, y, theta, name):
         spawn_srvc = rospy.ServiceProxy('/spawn', Spawn)
         spawn_srvc(x, y, theta, name)
         rospy.wait_for_service('/spawn')
-        
+
     def test_rec(self, length, depth):
         if depth == 0:
             self.go_straight(3, length, True)
@@ -181,26 +202,26 @@ class TurtlesimProject:
             self.test_rec(length, depth-1)
             self.turn(100, 60, False)
             self.test_rec(length, depth-1)
-            
+
     def face_up(self):
         current_angle = self.pose.theta
         current_angle = math.degrees(current_angle)
         angles_to_turn = current_angle - 90
         clockwise = True
-        
+
         if(angles_to_turn < 0):
             angles_to_turn = abs(angles_to_turn)
             clockwise = False
-        
+
         if (angles_to_turn > 180):
             angles_to_turn = 360 - angles_to_turn
             clockwise = not(clockwise)
-        
+
         self.turn(100, angles_to_turn, clockwise)
-        
+
     def draw_A(self, size, speed):
         self.face_up()
-        
+
         self.turn(100, 30, True)
         self.go_straight(speed, size*2, True)
         self.turn(100, 120, True)
@@ -211,10 +232,10 @@ class TurtlesimProject:
         self.turn(100, 60, False)
         self.set_color(0, 255, 0, 0, 'Name')
         self.go_straight(speed, size*1.15, True)
-        
+
     def draw_M(self, size, speed):
         self.face_up()
-        
+
         self.go_straight(speed, size*2, True)
         self.turn(200, 150, True)
         self.go_straight(speed, size*1.5, True)
@@ -222,10 +243,10 @@ class TurtlesimProject:
         self.go_straight(speed, size*1.5, True)
         self.turn(200, 150, True)
         self.go_straight(speed, size*2, True)
-        
+
     def draw_E(self, size, speed):
         self.face_up()
-        
+
         self.turn(200, 90, True)
         self.go_straight(speed, size, True)
         self.turn(200, 180, True)
@@ -240,23 +261,26 @@ class TurtlesimProject:
         self.go_straight(speed, size, True)
         self.turn(200, 90, True)
         self.go_straight(speed, size, True)
-        
+
 
 if __name__ == '__main__':
     tc = TurtlesimProject()
     tc.reset_sim()
     tc.kill_turtle('turtle1')
-    tc.spawn_turtle(2.5, 1, 0, 'Name')
+    tc.spawn_turtle(3.1, 1.5, 0, 'Name')
     tc.set_color(0, 255, 0, 0, 'Name')
     rospy.sleep(1)
     idx = 0
-    tc.draw_M(2, 5)
-    tc.draw_E(2, 5)
-    #tc.test_rec(0.2, 3)
-    #while idx < 6:
-    #    tc.test_rec(0.2, 3)
-    #    tc.turn(100, 60, False)
-    #    idx = idx + 1
-    tc.kill_turtle('Name')
+    #tc.draw_M(2, 5)
+    #tc.draw_E(2, 5)
+    #tc.turn(0, 120, False)
+    #tc.turn(0, 120, False)
+    while idx < 6:
+        #tc.test_rec(0.15, 3)
+        tc.test_rec(0.06, 4)
+        tc.turn(100, 60, False)
+        idx = idx + 1
+    #tc.kill_turtle('Name')
+
 
 
